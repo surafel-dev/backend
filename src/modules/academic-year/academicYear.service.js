@@ -1,3 +1,4 @@
+// academicYear.service.js
 const { AcademicYear } = require('./academicYear.model');
 
 class AcademicService {
@@ -11,17 +12,17 @@ class AcademicService {
   }
 
   async activateYear(schoolId, yearId) {
-    // 1. Deactivate current active year for this tenant
+    // 1. Deactivate current active year for this tenant school context boundary
     await AcademicYear.updateMany(
       { schoolId, isActive: true },
       { $set: { isActive: false } }
     );
 
-    // 2. Activate target year safely
+    // 2. Activate target year safely using modern driver configuration
     const updatedYear = await AcademicYear.findOneAndUpdate(
       { _id: yearId, schoolId },
       { $set: { isActive: true } },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     return updatedYear;

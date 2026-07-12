@@ -1,27 +1,22 @@
-// modules/grade/grade.controller.js
 const asyncHandler = require('express-async-handler');
 const gradeService = require('./grade.service');
 
-/**
- * @desc    Bulk Insert or Update student grades for a class/subject
- * @route   POST /api/v1/grades/bulk-upsert
- * @access  Private (Teacher/Admin)
- */
-const processBulkGrades = asyncHandler(async (req, res, next) => {
+const processBulkGrades = asyncHandler(async (req, res) => {
   const { academicYear, term, classId, subjectId, gradeData } = req.body;
-  
-  // Extract multi-tenant scope variables from your auth context
   const schoolId = req.user.schoolId; 
   const teacherId = req.user._id;
 
-  if (!gradeData || !Array.isArray(gradeData)) {
+  if (!academicYear || !term || !classId || !subjectId) {
     res.status(400);
-    throw new Error('Invalid format for grade processing dataset.');
+    throw new Error('Academic year, term, classId, and subjectId are required properties.');
+  }
+
+  if (!gradeData || !Array.isArray(gradeData) || gradeData.length === 0) {
+    res.status(400);
+    throw new Error('Invalid format for grade processing dataset. A non-empty array is required.');
   }
 
   const metaData = { schoolId, academicYear, term, classId, subjectId, teacherId };
-  
-  // Hand off to the service layer for heavy database bulkWrite operations
   const result = await gradeService.bulkUpsertGrades(metaData, gradeData);
 
   res.status(200).json({
@@ -35,6 +30,61 @@ const processBulkGrades = asyncHandler(async (req, res, next) => {
   });
 });
 
+const getClassInsights = asyncHandler(async (req, res) => {
+  const { classId, subjectId, academicYear, term } = req.query;
+  const schoolId = req.user.schoolId;
+
+  if (!classId || !subjectId || !academicYear || !term) {
+    res.status(400);
+    throw new Error('Query parameters classId, subjectId, academicYear, and term are required.');
+  }
+
+  const analyticsReport = await gradeService.getClassPerformanceReport(
+    schoolId,
+    classId,
+    subjectId,
+    academicYear,
+    term
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Performance metrics computed successfully.',
+    analytics: analyticsReport
+  });
+});
+
+/**
+ * @desc    Generate a clean consolidated single student terminal report card compilation
+ * @route   GET /api/v1/grades/report-card/:studentId
+ * @access  Private (Admin, Teacher, Student)
+ */
+const getReportCard = asyncHandler(async (req, res) => {
+  const { studentId } = req.params;
+  const { academicYear, term } = req.query;
+  const schoolId = req.user.schoolId;
+
+  if (!academicYear || !term) {
+    res.status(400);
+    throw new Error('AcademicYear and term query params are explicitly required.');
+  }
+
+  const reportCardData = await gradeService.generateStudentReportCard(
+    schoolId,
+    studentId,
+    academicYear,
+    term
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Student terminal report card metrics extracted successfully.',
+    reportCard: reportCardData
+  });
+});
+
 module.exports = {
-  processBulkGrades
+  processBulkGrades,
+  getClassInsights,
+  getReportCard
 };

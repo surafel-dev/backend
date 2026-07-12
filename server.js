@@ -30,7 +30,7 @@ app.use('/api/schools', schoolRoutes);
 app.use('/api/academic', academicRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/grades', gradeRoutes);
-app.use('/api/academic-years', academicYearRoutes);
+app.use('/api/academic', academicYearRoutes);
 app.use('/api/teachers', teacherRoutes);
 
 app.use(notFound);

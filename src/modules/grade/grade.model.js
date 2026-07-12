@@ -1,3 +1,4 @@
+// modules/grade/grade.model.js
 const mongoose = require('mongoose');
 
 const GradeSchema = new mongoose.Schema({
@@ -7,8 +8,14 @@ const GradeSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  academicYear: { type: String, required: true }, // e.g., "2018 E.C."
-  term: { type: String, required: true },         // e.g., "Semester 1"
+  academicYear: { 
+    type: String, 
+    required: true 
+  },
+  term: { 
+    type: String, 
+    required: true 
+  },
   classId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
@@ -28,13 +35,19 @@ const GradeSchema = new mongoose.Schema({
   },
   assessments: [
     {
-      assessmentName: { type: String, required: true }, // e.g., "Quiz 1"
-      weight: { type: Number, required: true },          // Max marks allocation %
-      scoreAchieved: { type: Number, required: true }    // Student's score
+      assessmentName: { type: String, required: true },
+      weight: { type: Number, required: true },          
+      scoreAchieved: { type: Number, required: true }    
     }
   ],
-  totalAccumulatedMarks: { type: Number, default: 0 },
-  totalPossibleWeight: { type: Number, default: 0 },
+  totalAccumulatedMarks: { 
+    type: Number, 
+    default: 0 
+  },
+  totalPossibleWeight: { 
+    type: Number, 
+    default: 0 
+  },
   teacherId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -42,7 +55,7 @@ const GradeSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Strict multi-tenant compound unique index
+// Enforce a strict multi-tenant unique rule: a student can only have one grade profile sheet per subject, per term, per year
 GradeSchema.index({ schoolId: 1, academicYear: 1, term: 1, studentId: 1, subjectId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Grade', GradeSchema);

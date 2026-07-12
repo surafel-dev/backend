@@ -1,31 +1,34 @@
-const { AcademicYear } = require('./academicYear.model');
+// academicYear.model.js
+const mongoose = require('mongoose');
 
-class AcademicService {
-  async createAcademicYear(schoolId, data) {
-    const year = new AcademicYear({ schoolId, ...data });
-    return await year.save();
-  }
+const TermSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  startDate: { type: Date, required: true },
+  endDate: { type: Date, required: true }
+});
 
-  async getAcademicYears(schoolId) {
-    return await AcademicYear.find({ schoolId }).sort({ startDate: -1 });
-  }
+const AcademicYearSchema = new mongoose.Schema({
+  schoolId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'School', 
+    required: true, 
+    index: true 
+  },
+  title: { type: String, required: true }, 
+  startDate: { type: Date, required: true },
+  endDate: { type: Date, required: true },
+  terms: [TermSchema],
+  isActive: { type: Boolean, default: false }
+}, { timestamps: true });
 
-  async activateYear(schoolId, yearId) {
-    // 1. Deactivate current active year for this tenant school context boundary
-    await AcademicYear.updateMany(
-      { schoolId, isActive: true },
-      { $set: { isActive: false } }
-    );
 
-    // 2. Activate target year safely using modern driver configuration
-    const updatedYear = await AcademicYear.findOneAndUpdate(
-      { _id: yearId, schoolId },
-      { $set: { isActive: true } },
-      { returnDocument: 'after' } // <-- FIX: Changed from { new: true } to eliminate deprecation warning
-    );
+AcademicYearSchema.index(
+  { schoolId: 1, isActive: 1 }, 
+  { unique: true, partialFilterExpression: { isActive: true } }
+);
 
-    return updatedYear;
-  }
-}
+const AcademicYear = mongoose.model('AcademicYear', AcademicYearSchema);
 
-module.exports = new AcademicService();
+module.exports = {
+  AcademicYear
+};
