@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
-
+const User = require('../modules/auth/user.model');
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
@@ -17,12 +17,21 @@ const protect = asyncHandler(async (req, res, next) => {
     // If jwt.verify fails, it throws an error which asyncHandler catches instantly
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Attach verified user contextual data to the request object
-    req.user = {
-      id: decoded.id,
-      role: decoded.role, 
-      schoolId: decoded.schoolId
-    };
+    const currentUser = await User.findById(decoded.id).select('-password');
+    req.user = currentUser;
+    
+    if (!currentUser) {
+      res.status(401);
+      throw new Error('The user belonging to this token no longer exists.');
+    }
+
+    if (!currentUser.isActive) {
+      res.status(401);
+      throw new Error('This user account has been deactivated.');
+    }
+
+    // Attach the actual, clean database document to req.user
+    req.user = currentUser;
 
     return next();
   }

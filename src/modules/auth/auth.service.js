@@ -1,3 +1,4 @@
+// src/modules/auth/auth.service.js
 const User = require('./user.model'); 
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
@@ -10,21 +11,51 @@ const generateToken = (user) => {
   );
 };
 
-const register = async (userData) => {
-  const userExists = await User.findOne({ email: userData.email });
-  if (userExists) throw new Error('A user with this email already exists');
+const registerSuperAdmin = async (adminData) => {
+  const userExists = await User.findOne({ email: adminData.email.toLowerCase().trim() });
+  if (userExists) throw new Error('A user with this email already exists.');
 
-  const newUser = await User.create(userData);
-  return { id: newUser._id, email: newUser.email, role: newUser.role, token: generateToken(newUser) };
+  const superAdmin = await User.create({
+    name: adminData.name.trim(),
+    email: adminData.email.toLowerCase().trim(),
+    password: adminData.password,
+    role: 'super-admin',
+    schoolId: null, // Super-Admins occupy the platform root layer
+    isActive: true 
+  });
+
+  return {
+    id: superAdmin._id,
+    name: superAdmin.name,
+    email: superAdmin.email,
+    role: superAdmin.role,
+    token: generateToken(superAdmin)
+  };
 };
 
 const login = async (email, password) => {
-  const user = await User.findOne({ email }).select('+password');
+  // Pull core auth data along with hidden password field
+  const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
+  
   if (!user || !(await bcrypt.compare(password, user.password))) {
     throw new Error('Invalid email or password');
   }
 
-  return { id: user._id, email: user.email, role: user.role, schoolId: user.schoolId, token: generateToken(user) };
+  if (!user.isActive) {
+    throw new Error('Account inactive. You must claim your profile invitation email first.');
+  }
+
+  return { 
+    id: user._id, 
+    name: user.name,
+    email: user.email, 
+    role: user.role, 
+    schoolId: user.schoolId,
+    token: generateToken(user) 
+  };
 };
 
-module.exports = { register, login };
+module.exports = { 
+  registerSuperAdmin, 
+  login 
+};

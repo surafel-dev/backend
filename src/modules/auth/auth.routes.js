@@ -1,8 +1,12 @@
+// src/modules/auth/auth.routes.js
 const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser } = require('./auth.controller');
+const { signupSuperAdmin, loginUser } = require('./auth.controller');
 
-router.post('/register', registerUser);
+// Root System Configuration Route
+router.post('/register-superadmin', signupSuperAdmin);
+
+// Standard Public Authentication Endpoint
 router.post('/login', loginUser);
 
 module.exports = router;
