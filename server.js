@@ -1,5 +1,9 @@
 const express = require('express');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+
 dotenv.config();
 
 const connectDB = require('./src/config/db.js');
@@ -21,7 +25,26 @@ const port = process.env.PORT || 5000;
 connectDB();
 
 const app = express();
+
+app.use(helmet());
+
 app.use(express.json());
+
+app.use(mongoSanitize());
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
+  standardHeaders: true, 
+  legacyHeaders: false,  
+  message: {
+    success: false,
+    message: 'Too many requests from this IP address. Please try again after 15 minutes.'
+  }
+});
+
+app.use('/api', apiLimiter);
+
 
 app.use('/api/auth', superadminRoutes);
 app.use('/api/staff', staffRoutes);
