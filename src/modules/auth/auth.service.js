@@ -55,7 +55,59 @@ const login = async (email, password) => {
   };
 };
 
+// Generate a short-lived token for password resets (expires in 15 minutes)
+const generateResetToken = async (email) => {
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
+  if (!user) {
+    throw new Error('No account found with that email address.');
+  }
+
+  // Signs a specialized payload containing only user ID and an isolated secret key prefix
+  return jwt.sign(
+    { id: user._id }, 
+    process.env.JWT_SECRET, 
+    { expiresIn: '15m' }
+  );
+};
+
+// Reset password using the verified temporary token
+const resetPasswordWithToken = async (token, newPassword) => {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      throw new Error('User no longer exists.');
+    }
+
+    user.password = newPassword;
+    await user.save(); // Triggers the pre-save password hashing hook automatically
+  } catch (error) {
+    throw new Error('Password reset token is invalid or has expired.');
+  }
+};
+
+// Verify old credentials and replace with a fresh password
+const updateUserPassword = async (userId, currentPassword, newPassword) => {
+  // Must explicitly select '+password' because it's hidden by default in your schema
+  const user = await User.findById(userId).select('+password');
+  if (!user) {
+    throw new Error('User not found.');
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new Error('The current password you entered is incorrect.');
+  }
+
+  user.password = newPassword;
+  await user.save(); // Triggers the pre-save password hashing hook automatically
+};
+
 module.exports = { 
   registerSuperAdmin, 
-  login 
+  login, 
+  generateResetToken, 
+  resetPasswordWithToken, 
+  updateUserPassword 
 };
