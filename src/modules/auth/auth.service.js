@@ -2,6 +2,9 @@
 const User = require('./user.model'); 
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const { OAuth2Client } = require('google-auth-library');
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -9,6 +12,57 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     { expiresIn: '30d' }
   );
+};
+  
+// --- Add Google Authentication Strategy ---
+const googleLogin = async (idToken) => {
+  // 1. Verify Google Token
+  const ticket = await client.verifyIdToken({
+    idToken,
+    audience: process.env.GOOGLE_CLIENT_ID,
+  });
+
+  const payload = ticket.getPayload();
+  if (!payload.email_verified) {
+    throw new Error('Google account email is not verified.');
+  }
+
+  const { sub: googleId, email, name } = payload;
+  const sanitizedEmail = email.toLowerCase().trim();
+
+  // 2. Find user by email or googleId
+  let superAdmin = await User.findOne({ 
+    $or: [{ email: sanitizedEmail }, { googleId }] 
+  });
+
+  if (!superAdmin) {
+    // New user via Google Sign-In
+    superAdmin = await User.create({
+      name,
+      email: sanitizedEmail,
+      googleId,
+      role: 'super-admin',
+      isActive: true,
+    });
+  } else if (!superAdmin.googleId) {
+    // Account exists via standard signup; link googleId
+    superAdmin.googleId = googleId;
+    await superAdmin.save();
+  }
+
+  if (!superAdmin.isActive) {
+    throw new Error('Account inactive. Please contact support.');
+  }
+
+  // Return standard auth user payload
+  return {
+    id: superAdmin._id,
+    name: superAdmin.name,
+    email: superAdmin.email,
+    role: superAdmin.role,
+    schoolId: superAdmin.schoolId,
+    token: generateToken(superAdmin ),
+  };
 };
 
 const registerSuperAdmin = async (adminData) => {
@@ -106,7 +160,8 @@ const updateUserPassword = async (userId, currentPassword, newPassword) => {
 
 module.exports = { 
   registerSuperAdmin, 
-  login, 
+  login,
+  googleLogin, 
   generateResetToken, 
   resetPasswordWithToken, 
   updateUserPassword 

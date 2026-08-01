@@ -22,6 +22,23 @@ const signupSuperAdmin = asyncHandler(async (req, res) => {
   });
 });
 
+const googleLoginUser = asyncHandler(async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    res.status(400);
+    throw new Error('Google ID token is required.');
+  }
+
+  const result = await authService.googleLogin(token);
+
+  res.status(200).json({
+    success: true,
+    message: 'Google login successful.',
+    data: result,
+  });
+});
+
 // @desc    Universal Login Route for all application accounts
 // @route   POST /api/auth/login
 // @access  Public
@@ -54,6 +71,7 @@ const logoutUser = asyncHandler(async (req, res) => {
     message: 'Logged out successfully. Securely discard your token on the client side.' 
   });
 });
+
 
 // @desc    Initiate password reset via email
 // @route   POST /api/auth/forgot-password
@@ -120,6 +138,7 @@ const changePassword = asyncHandler(async (req, res) => {
 module.exports = { 
   signupSuperAdmin, 
   loginUser, 
+  googleLoginUser,
   logoutUser, 
   forgotPassword, 
   resetPassword, 

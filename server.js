@@ -1,8 +1,10 @@
 const express = require('express');
+const cors = require('cors');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
+
 
 dotenv.config();
 
@@ -26,11 +28,35 @@ connectDB();
 
 const app = express();
 
+app.use(cors({
+  origin: 'http://localhost:3039', // Replace with your frontend URL/port
+  credentials: true,               // Enable if passing cookies/authorization headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(helmet());
 
 app.use(express.json());
 
-app.use(mongoSanitize());
+app.use((req, res, next) => {
+  const sanitize = (obj) => {
+    if (obj && typeof obj === 'object') {
+      for (const key in obj) {
+        if (key.startsWith('$')) {
+          delete obj[key];
+        } else {
+          sanitize(obj[key]);
+        }
+      }
+    }
+  };
+
+  if (req.body) sanitize(req.body);
+  if (req.params) sanitize(req.params);
+
+  next();
+});
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
