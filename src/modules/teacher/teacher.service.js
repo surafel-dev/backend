@@ -24,6 +24,8 @@ const inviteTeacher = async (schoolId, teacherDetails) => {
   const expirationTimeline = new Date();
   expirationTimeline.setHours(expirationTimeline.getHours() + 48);
 
+  try {
+
   const newTeacher = await Teacher.create({
     schoolId,
     name: name.trim(),
@@ -38,7 +40,15 @@ const inviteTeacher = async (schoolId, teacherDetails) => {
   });
 
   return { teacher: newTeacher, token };
-};
+}  catch (err) {
+  if (err.code === 11000) {
+      const error = new Error('A teacher profile with this email already exists.');
+      error.statusCode = 400;
+      throw error;
+  } 
+  throw err;
+ }
+};  
 
 const acceptTeacherInvitation = async (token, password) => {
   if (!token || !password) {
@@ -128,8 +138,25 @@ const allocateClassAndSubject = async (schoolId, teacherId, classId, subjectId) 
   return teacher;
 };
 
+const getAllTeachers = async (schoolId) => {
+  let filter = {};
+
+  // If a schoolId is supplied (non super-admin cases), restrict results to that school
+  if (schoolId) {
+    filter.schoolId = schoolId;
+  }
+
+  const teachers = await Teacher.find(filter)
+    .populate('assignments.classId', 'name')
+    .populate('assignments.subjectId', 'name')
+    .lean();
+
+  return teachers;
+};
+
 module.exports = {
   inviteTeacher,
   acceptTeacherInvitation,
-  allocateClassAndSubject
+  allocateClassAndSubject,
+  getAllTeachers
 };

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 const schoolSchema = new mongoose.Schema(
   {
@@ -19,6 +20,11 @@ const schoolSchema = new mongoose.Schema(
       city: { type: String, required: true },
       region: { type: String, required: true }
     },
+    createdBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true 
+  },
     isActive: {
       type: Boolean,
       default: true
@@ -26,5 +32,12 @@ const schoolSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+schoolSchema.pre('save', function () {
+  if (!this.schoolCode) {
+    const uniqueHash = crypto.randomBytes(4).toString('hex').toUpperCase();
+    this.schoolCode = `SC-${uniqueHash}`;
+  }
+});
 
 module.exports = mongoose.model('School', schoolSchema);
