@@ -1,22 +1,32 @@
-const express = require('express'); //[cite: 1]
-const router = express.Router(); //[cite: 1]
-const asyncHandler = require('express-async-handler'); //[cite: 1]
-const academicService = require('./academic.service'); //[cite: 1]
+const express = require('express'); 
+const router = express.Router(); 
+const asyncHandler = require('express-async-handler'); 
+const academicService = require('./academic.service'); 
+const mongoose = require('mongoose');
 
-// Importing your exact middleware functions[cite: 1]
-const { protect, restrictTo } = require('../../middleware/authMiddleware'); //[cite: 1]
+const { protect, restrictTo } = require('../../middleware/authMiddleware'); 
 
 /**
- * @route   POST /api/academic/classes
+ * @route   POST /api/academic/classesyarn install
  * @desc    Create a new class tier (e.g., Grade 12)
  * @access  Private (Admin, Registrar)
  */
 router.post( 
   '/classes', 
   protect, 
-  restrictTo('admin'),
+  restrictTo('admin', 'academic_vp', 'super-admin'),
   asyncHandler(async (req, res) => { 
-    const { schoolId } = req.user; 
+    let schoolId;
+    
+      if (req.user?.role === 'super-admin') {
+        // Super-admin isn't tied to one school — they must explicitly choose one.
+        schoolId = req.body.schoolId;
+    
+        if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+          res.status(400);
+          throw new Error('Validation Error: A valid schoolId must be provided.');
+        }
+      }  
     const { name, numericLevel } = req.body;
 
     if (!name || numericLevel === undefined) { //[cite: 1]
@@ -36,58 +46,167 @@ router.post(
 ); //[cite: 1]
 
 /**
+ * @route   GET /api/academic/classes
+ * @desc    List class tiers. Super-admin can filter with ?schoolId=,
+ *          or omit it to see classes across all schools.
+ * @access  Private (Admin, Academic_VP, Registrar, Teacher, Super Admin)
+ */
+router.get(
+  '/classes',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin', 'registrar', 'teacher'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.query.schoolId; // optional — omitted means "all schools"
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const classes = await academicService.getAllClasses(schoolId);
+
+    res.status(200).json({
+      success: true,
+      count: classes.length,
+      data: classes
+    });
+  })
+);
+
+/**
  * @route   POST /api/academic/sections
  * @desc    Create a new section under a specific class tier
  * @access  Private (Admin, Registrar)
  */
-router.post( //[cite: 1]
-  '/sections', //[cite: 1]
-  protect, //[cite: 1]
-  restrictTo('admin', 'registrar'), // Utilizing your custom authorization name[cite: 1]
-  asyncHandler(async (req, res) => { //[cite: 1]
-    const { schoolId } = req.user; // Cleanly aligned to your decoded token key[cite: 1]
+router.post(
+  '/sections',
+  protect, 
+  restrictTo('admin', 'registrar', 'super-admin'), // Utilizing your custom authorization name[cite: 1]
+  asyncHandler(async (req, res) => { 
+    let schoolId;
+    
+      if (req.user?.role === 'super-admin') {
+        // Super-admin isn't tied to one school — they must explicitly choose one.
+        schoolId = req.body.schoolId;
+    
+        if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+          res.status(400);
+          throw new Error('Validation Error: A valid schoolId must be provided.');
+        }
+      }  
     const { classId, name, roomNumber, homeroomTeacherId, capacity } = req.body; //[cite: 1]
 
-    if (!classId || !name) { //[cite: 1]
-      res.status(400); //[cite: 1]
+    if (!classId || !name) { 
+      res.status(400); 
       throw new Error('Class ID and Section name are required fields.'); //[cite: 1]
     } //[cite: 1]
 
     const sectionData = { name, roomNumber, homeroomTeacherId, capacity }; //[cite: 1]
     const newSection = await academicService.createSection(schoolId, classId, sectionData); //[cite: 1]
 
-    res.status(201).json({ //[cite: 1]
-      success: true, //[cite: 1]
-      message: 'Section configured successfully.', //[cite: 1]
-      data: newSection //[cite: 1]
-    }); //[cite: 1]
-  }) //[cite: 1]
-); //[cite: 1]
+    res.status(201).json({ 
+      success: true, 
+      message: 'Section configured successfully.', 
+      data: newSection 
+    }); 
+  }) 
+); 
 
-router.post( //[cite: 1]
-  '/subjects', //[cite: 1]
-  protect, //[cite: 1]
-  restrictTo('admin'), 
-  asyncHandler(async (req, res) => { //[cite: 1]
-    const { schoolId } = req.user; //[cite: 1]
-    const { name, code, category, type } = req.body; //[cite: 1]
+/**
+ * @route   GET /api/academic/sections
+ * @desc    List sections. Super-admin can filter with ?schoolId=,
+ *          or omit it to see sections across all schools.
+ * @access  Private (Admin, Academic_VP, Registrar, Teacher, Super Admin)
+ */
+router.get(
+  '/sections',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin', 'registrar', 'teacher'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
 
-    // Validation[cite: 1]
-    if (!name || !code) { //[cite: 1]
-      res.status(400); //[cite: 1]
-      throw new Error('Subject name and unique subject code are required fields.'); //[cite: 1]
-    } //[cite: 1]
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.query.schoolId; // optional — omitted means "all schools"
+    } else {
+      schoolId = req.user?.schoolId;
+    }
 
-    const subjectData = { name, code, category, type }; //[cite: 1]
-    const newSubject = await academicService.createSubject(schoolId, subjectData); //[cite: 1]
+    const sections = await academicService.getAllSections(schoolId);
 
-    res.status(201).json({ //[cite: 1]
-      success: true, //[cite: 1]
-      message: 'Subject module created successfully.', //[cite: 1]
-      data: newSubject //[cite: 1]
-    }); //[cite: 1]
-  }) //[cite: 1]
-); //[cite: 1]
+    res.status(200).json({
+      success: true,
+      count: sections.length,
+      data: sections
+    });
+  })
+);
+
+router.post( 
+  '/subjects', 
+  protect, 
+  restrictTo('admin', 'academic_vp', 'super-admin'),
+  asyncHandler(async (req, res) => {
+
+    let schoolId;
+    
+      if (req.user?.role === 'super-admin') {
+        // Super-admin isn't tied to one school — they must explicitly choose one.
+        schoolId = req.body.schoolId;
+    
+        if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+          res.status(400);
+          throw new Error('Validation Error: A valid schoolId must be provided.');
+        }
+      }  
+
+    const { name, code, category, type } = req.body; 
+
+    // Validation
+    if (!name || !code) { 
+      res.status(400); 
+      throw new Error('Subject name and unique subject code are required fields.'); 
+    } 
+
+    const subjectData = { name, code, category, type }; 
+    const newSubject = await academicService.createSubject(schoolId, subjectData);
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Subject module created successfully.', 
+      data: newSubject 
+    }); 
+  }) 
+); 
+
+/**
+ * @route   GET /api/academic/subjects
+ * @desc    List subjects. Super-admin can filter with ?schoolId=,
+ *          or omit it to see subjects across all schools.
+ * @access  Private (Admin, Academic_VP, Registrar, Teacher, Super Admin)
+ */
+router.get(
+  '/subjects',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin', 'registrar', 'teacher'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.query.schoolId; // optional — omitted means "all schools"
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const subjects = await academicService.getAllSubjects(schoolId);
+
+    res.status(200).json({
+      success: true,
+      count: subjects.length,
+      data: subjects
+    });
+  })
+);
 
 /**
  * @route   POST /api/academic/classes/:classId/subjects
@@ -95,28 +214,41 @@ router.post( //[cite: 1]
  * @access  Private (Admin, Academic_VP)
  */
 router.post( //[cite: 1]
-  '/classes/:classId/subjects', //[cite: 1]
-  protect, //[cite: 1]
-  restrictTo('admin'), //[cite: 1]
-  asyncHandler(async (req, res) => { //[cite: 1]
-    const { schoolId } = req.user; //[cite: 1]
-    const { classId } = req.params; //[cite: 1]
-    const { subjectIds } = req.body; //[cite: 1]
+  '/classes/:classId/subjects',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin'), 
+  asyncHandler(async (req, res) => { 
+    let schoolId;
 
-    if (!Array.isArray(subjectIds) || subjectIds.length === 0) { //[cite: 1]
-      res.status(400); //[cite: 1]
-      throw new Error('Please provide a non-empty array of subject IDs to assign.'); //[cite: 1]
+    if (req.user?.role === 'super-admin') {
+      // Super-admin isn't tied to one school — they must explicitly choose one.
+      schoolId = req.body.schoolId;
+
+      if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+        res.status(400);
+        throw new Error('Validation Error: A valid schoolId must be provided.');
+      }
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const { classId } = req.params; 
+    const { subjectIds } = req.body; 
+
+    if (!Array.isArray(subjectIds) || subjectIds.length === 0) { 
+      res.status(400); 
+      throw new Error('Please provide a non-empty array of subject IDs to assign.'); 
     } //[cite: 1]
 
-    const updatedClass = await academicService.assignSubjectsToClass(schoolId, classId, subjectIds); //[cite: 1]
+    const updatedClass = await academicService.assignSubjectsToClass(schoolId, classId, subjectIds); 
 
-    res.status(200).json({ //[cite: 1]
-      success: true, //[cite: 1]
-      message: 'Subjects updated for this class tier.', //[cite: 1]
-      data: updatedClass //[cite: 1]
-    }); //[cite: 1]
-  }) //[cite: 1]
-); //[cite: 1]
+    res.status(200).json({
+      success: true, 
+      message: 'Subjects updated for this class tier.', 
+      data: updatedClass 
+    }); 
+  }) 
+); 
 
 /**
  * @route   PUT /api/academic/sections/:sectionId/homeroom
@@ -126,7 +258,7 @@ router.post( //[cite: 1]
 router.put(
   '/sections/:sectionId/homeroom',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'academic_vp', 'super-admin'),
   asyncHandler(async (req, res) => {
     const { schoolId } = req.user;
     const { sectionId } = req.params;
@@ -150,7 +282,7 @@ router.put(
 router.post(
   '/sections/:sectionId/assign-teacher',
   protect,
-  restrictTo('admin', 'academic_vp'),
+  restrictTo('admin', 'academic_vp', 'super-admin'),
   asyncHandler(async (req, res) => {
     const { schoolId } = req.user;
     const { sectionId } = req.params;

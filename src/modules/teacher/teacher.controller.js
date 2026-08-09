@@ -71,7 +71,7 @@ const inviteTeacher = asyncHandler(async (req, res) => {
   });
 });
 
-// acceptInvite and assignClassSubject remain exactly as you had them...
+// acceptInvite remains exactly as you had it...
 const acceptInvite = asyncHandler(async (req, res) => {
   const { token } = req.params; //[cite: 7]
   const { password } = req.body; //[cite: 7]
@@ -93,7 +93,20 @@ const acceptInvite = asyncHandler(async (req, res) => {
 const assignClassSubject = asyncHandler(async (req, res) => {
   const { classId, subjectId } = req.body;
   const teacherId = req.params.id;
-  const schoolId = req.user.schoolId;
+
+  let schoolId;
+
+  if (req.user?.role === 'super-admin') {
+    // Super-admin isn't tied to one school — they must explicitly choose one.
+    schoolId = req.body.schoolId;
+
+    if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+      res.status(400);
+      throw new Error('Validation Error: A valid schoolId must be provided.');
+    }
+  } else {
+    schoolId = req.user?.schoolId;
+  }
 
   if (!classId || !subjectId) {
     res.status(400);

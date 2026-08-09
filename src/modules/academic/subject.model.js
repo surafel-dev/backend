@@ -45,9 +45,9 @@ const subjectSchema = new mongoose.Schema(
 );
 
 // Prevent duplicate subject codes within the same school
-subjectSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+subjectSchema.index({ schoolId: 1, code: 1 }, { unique: true });
 // Prevent identical subject names within the same school
-subjectSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+subjectSchema.index({ schoolId: 1, name: 1 }, { unique: true });
 
 const Subject = mongoose.model('Subject', subjectSchema);
 

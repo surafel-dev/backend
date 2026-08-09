@@ -1,30 +1,42 @@
-const Class = require('./class.model'); //[cite: 2]
-const Section = require('./section.model'); //[cite: 2]
-const Subject = require('./subject.model'); //[cite: 2]
+const Class = require('./class.model'); 
+const Section = require('./section.model'); 
+const Subject = require('./subject.model'); 
 
 const createClass = async (schoolId, classData) => {
-  // Check if a class with the same name already exists in this school[cite: 2]
-  const existingClass = await Class.findOne({ schoolId, name: classData.name }); //[cite: 2]
-  if (existingClass) { //[cite: 2]
-    const error = new Error(`Class tier "${classData.name}" already exists in your school.`); //[cite: 2]
-    error.statusCode = 400; //[cite: 2]
-    throw error; //[cite: 2]
-  } //[cite: 2]
+  // Check if a class with the same name already exists in this school
+  const existingClass = await Class.findOne({ schoolId, name: classData.name });
+  if (existingClass) {
+    const error = new Error(`Class tier "${classData.name}" already exists in your school.`);
+    error.statusCode = 400;
+    throw error;
+  }
 
-  const newClass = new Class({ //[cite: 2]
-    ...classData, //[cite: 2]
-    schoolId //[cite: 2]
-  }); //[cite: 2]
+  const newClass = new Class({
+    ...classData,
+    schoolId
+  });
 
-  return await newClass.save(); //[cite: 2]
+  return await newClass.save();
+};
+
+
+const getAllClasses = async (schoolId) => {
+  const filter = {};
+  if (schoolId) {
+    filter.schoolId = schoolId;
+  }
+
+  return await Class.find(filter)
+    .populate('subjects', 'name code')
+    .sort({ numericLevel: 1, name: 1 });
 };
 
 /**
  * Create a section mapped to a verified parent class under a specific school[cite: 2]
  */
 const createSection = async (schoolId, classId, sectionData) => {
-  const parentClass = await Class.findOne({ _id: classId, schoolId }); //[cite: 2]
-  if (!parentClass) { //[cite: 2]
+  const parentClass = await Class.findOne({ _id: classId, schoolId }); 
+  if (!parentClass) { 
     const error = new Error('Parent Class tier does not exist under your institution.'); //[cite: 2]
     error.statusCode = 404; //[cite: 2]
     throw error; //[cite: 2]
@@ -37,13 +49,30 @@ const createSection = async (schoolId, classId, sectionData) => {
     throw error; //[cite: 2]
   } //[cite: 2]
 
-  const newSection = new Section({ //[cite: 2]
-    ...sectionData, //[cite: 2]
-    classId, //[cite: 2]
-    schoolId //[cite: 2]
+  const newSection = new Section({ 
+    ...sectionData,
+    classId,
+    schoolId 
   }); //[cite: 2]
 
-  return await newSection.save(); //[cite: 2]
+  return await newSection.save(); 
+};
+
+/**
+ * List sections. If schoolId is provided, results are scoped to that
+ * school; if omitted (super-admin browsing all schools), all sections are
+ * returned.
+ */
+const getAllSections = async (schoolId) => {
+  const filter = {};
+  if (schoolId) {
+    filter.schoolId = schoolId;
+  }
+
+  return await Section.find(filter)
+    .populate('classId', 'name numericLevel')
+    .populate('homeroomTeacherId', 'name email photo')
+    .sort({ createdAt: -1 });
 };
 
 const createSubject = async (schoolId, subjectData) => {
@@ -63,32 +92,46 @@ const createSubject = async (schoolId, subjectData) => {
     throw error; //[cite: 2]
   } //[cite: 2]
 
-  const newSubject = new Subject({ //[cite: 2]
-    ...subjectData, //[cite: 2]
-    code: subjectData.code.toUpperCase(), // Normalize code to uppercase[cite: 2]
-    schoolId //[cite: 2]
-  }); //[cite: 2]
+  const newSubject = new Subject({ 
+    ...subjectData, 
+    code: subjectData.code.toUpperCase(), 
+    schoolId 
+  }); 
 
-  return await newSubject.save(); //[cite: 2]
+  return await newSubject.save(); 
 };
 
 /**
- * Link an array of subjects to a Class tier under a specific school[cite: 2]
+ * List subjects. If schoolId is provided, results are scoped to that
+ * school; if omitted (super-admin browsing all schools), all subjects are
+ * returned.
+ */
+const getAllSubjects = async (schoolId) => {
+  const filter = {};
+  if (schoolId) {
+    filter.schoolId = schoolId;
+  }
+
+  return await Subject.find(filter).sort({ name: 1 });
+};
+
+/**
+ * Link an array of subjects to a Class tier under a specific school
  */
 const assignSubjectsToClass = async (schoolId, classId, subjectIds) => {
   const updatedClass = await Class.findOneAndUpdate(
-    { _id: classId, schoolId }, //[cite: 2]
-    { $addToSet: { subjects: { $each: subjectIds } } }, //[cite: 2]
-    { returnDocument: 'after' } //[cite: 2]
-  ).populate('subjects'); //[cite: 2]
+    { _id: classId, schoolId }, 
+    { $addToSet: { subjects: { $each: subjectIds } } }, 
+    { returnDocument: 'after' } 
+  ).populate('subjects'); 
 
-  if (!updatedClass) { //[cite: 2]
-    const error = new Error('Target Class tier not found.'); //[cite: 2]
-    error.statusCode = 404; //[cite: 2]
-    throw error; //[cite: 2]
-  } //[cite: 2]
+  if (!updatedClass) { 
+    const error = new Error('Target Class tier not found.'); 
+    error.statusCode = 404; 
+    throw error; 
+  } 
 
-  return updatedClass; //[cite: 2]
+  return updatedClass; 
 };
 
 /**
@@ -155,19 +198,19 @@ const assignSubjectTeacher = async (schoolId, sectionId, subjectId, teacherId) =
 };
 
 /**
- * Fetch deep populated Class and Subject references for a Section[cite: 2]
+ * Fetch deep populated Class and Subject references for a Section
  */
 const getFullSectionDetails = async (schoolId, sectionId) => {
-  return await Section.findOne({ _id: sectionId, schoolId }) //[cite: 2]
+  return await Section.findOne({ _id: sectionId, schoolId }) 
     .populate('homeroomTeacherId', 'name email phoneNumber photo')
-    .populate({ //[cite: 2]
-      path: 'classId', //[cite: 2]
-      select: 'name numericLevel subjects', //[cite: 2]
-      populate: { //[cite: 2]
-        path: 'subjects', //[cite: 2]
-        select: 'name code category' //[cite: 2]
-      } //[cite: 2]
-    }) //[cite: 2]
+    .populate({
+      path: 'classId', 
+      select: 'name numericLevel subjects', 
+      populate: { 
+        path: 'subjects', 
+        select: 'name code category' 
+      }
+    }) 
     .populate({
       path: 'subjectTeachers.subjectId',
       select: 'name code'
@@ -179,11 +222,14 @@ const getFullSectionDetails = async (schoolId, sectionId) => {
 };
 
 module.exports = {
-  createClass, //[cite: 2]
-  createSubject, //[cite: 2]
-  assignSubjectsToClass, //[cite: 2]
-  createSection, //[cite: 2]
+  createClass, 
+  getAllClasses,
+  createSubject,
+  getAllSubjects,
+  assignSubjectsToClass, 
+  createSection, 
+  getAllSections,
   assignHomeroomTeacher,
   assignSubjectTeacher,
-  getFullSectionDetails //[cite: 2]
+  getFullSectionDetails 
 };

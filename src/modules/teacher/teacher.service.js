@@ -92,7 +92,7 @@ const acceptTeacherInvitation = async (token, password) => {
 
     teacher.userId = newUser[0]._id;
     teacher.status = 'Active';
-    teacher.invitationToken = null; // <-- FIX: Clear the correct field
+    teacher.invitationToken = null; 
     teacher.invitationExpires = null; 
 
     await teacher.save({ session: session });
