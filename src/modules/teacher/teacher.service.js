@@ -138,8 +138,77 @@ const allocateClassAndSubject = async (schoolId, teacherId, classId, subjectId) 
   return teacher;
 };
 
+const revokeTeacherAccess = async (schoolId, teacherId) => {
+  if (!schoolId || !teacherId) {
+    const error = new Error('School ID and teacher ID are required');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const teacher = await Teacher.findOne({ _id: teacherId, schoolId });
+  if (!teacher) {
+    const error = new Error('Teacher profile not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (teacher.status === 'Pending') {
+    const error = new Error('This teacher has not accepted an invitation yet, so there is no access to revoke.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (teacher.status === 'Revoked') {
+    const error = new Error('This teacher\'s access has already been revoked.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    if (teacher.userId) {
+      await User.findByIdAndUpdate(
+        teacher.userId,
+        { isActive: false },
+        { session }
+      );
+    }
+
+    teacher.status = 'Revoked';
+    await teacher.save({ session });
+
+    await session.commitTransaction();
+    return teacher;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
 const getAllTeachers = async (schoolId) => {
   let filter = {};
+
+  // If a schoolId is supplied (non super-admin cases), restrict results to that school
+  if (schoolId) {
+    filter.schoolId = schoolId;
+  }
+
+  const teachers = await Teacher.find(filter)
+    .populate('assignments.classId', 'name')
+    .populate('assignments.subjectId', 'name')
+    .lean();
+
+  return teachers;
+};
+
+// Only teachers who have accepted their invitation (status flips to 'Active'
+// in acceptTeacherInvitation once they set a password and get a linked userId).
+const getAcceptedTeachers = async (schoolId) => {
+  let filter = { status: 'Active' };
 
   // If a schoolId is supplied (non super-admin cases), restrict results to that school
   if (schoolId) {
@@ -158,5 +227,7 @@ module.exports = {
   inviteTeacher,
   acceptTeacherInvitation,
   allocateClassAndSubject,
-  getAllTeachers
+  revokeTeacherAccess,
+  getAllTeachers,
+  getAcceptedTeachers
 };

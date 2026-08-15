@@ -17,7 +17,7 @@ const TeacherSchema = new mongoose.Schema({
   },
   bio: { type: String, trim: true },
   
-  status: { type: String, enum: ['Pending', 'Active'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'Active', 'Revoked'], default: 'Pending' },
   invitationToken: { 
   type: String, 
   select: false 

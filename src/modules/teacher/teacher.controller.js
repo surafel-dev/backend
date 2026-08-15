@@ -127,6 +127,32 @@ const assignClassSubject = asyncHandler(async (req, res) => {
   });
 });
 
+const revokeAccess = asyncHandler(async (req, res) => {
+  const teacherId = req.params.id;
+
+  let schoolId;
+
+  if (req.user?.role === 'super-admin') {
+    // Super-admin isn't tied to one school — they must explicitly choose one.
+    schoolId = req.body.schoolId;
+
+    if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+      res.status(400);
+      throw new Error('Validation Error: A valid schoolId must be provided.');
+    }
+  } else {
+    schoolId = req.user?.schoolId;
+  }
+
+  const teacher = await teacherService.revokeTeacherAccess(schoolId, teacherId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Teacher access revoked successfully',
+    teacher: { id: teacher._id, email: teacher.email, status: teacher.status }
+  });
+});
+
 const getAllTeachers = asyncHandler(async (req, res) => {
   let schoolId;
 
@@ -147,9 +173,31 @@ const getAllTeachers = asyncHandler(async (req, res) => {
   });
 });
 
+const getAcceptedTeachers = asyncHandler(async (req, res) => {
+  let schoolId;
+
+  if (req.user?.role === 'super-admin') {
+    // Super-admin can optionally filter by a query parameter 'schoolId'
+    schoolId = req.query.schoolId;
+  } else {
+    // Other roles are locked to their own school context
+    schoolId = req.user?.schoolId;
+  }
+
+  const teachers = await teacherService.getAcceptedTeachers(schoolId);
+
+  res.status(200).json({
+    success: true,
+    count: teachers.length,
+    teachers
+  });
+});
+
 module.exports = {
   getAllTeachers,
+  getAcceptedTeachers,
   inviteTeacher,
   acceptInvite,
-  assignClassSubject
+  assignClassSubject,
+  revokeAccess
 };

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { inviteTeacher, acceptInvite, assignClassSubject, getAllTeachers } = require('./teacher.controller');
+const { inviteTeacher, acceptInvite, assignClassSubject, getAllTeachers, getAcceptedTeachers, revokeAccess } = require('./teacher.controller');
 const { uploadPhoto } = require('../../utils/imageProcessor'); 
 const { protect, restrictTo } = require('../../middleware/authMiddleware');
 
@@ -12,6 +12,14 @@ router.get(
   protect,
   restrictTo('admin', 'hr', 'super-admin'),
   getAllTeachers
+);
+
+// Only teachers who have accepted their invite (status: 'Active')
+router.get(
+  '/accepted',
+  protect,
+  restrictTo('admin', 'hr', 'super-admin'),
+  getAcceptedTeachers
 );
 
 // Multi-tenant authorization gateways (with photo upload middleware injected)
@@ -28,6 +36,13 @@ router.post(
   protect, 
   restrictTo('admin', 'hr', 'super-admin'), 
   assignClassSubject
+);
+
+router.post(
+  '/:id/revoke',
+  protect,
+  restrictTo('admin', 'super-admin'),
+  revokeAccess
 );
 
 module.exports = router;

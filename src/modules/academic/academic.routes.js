@@ -75,6 +75,76 @@ router.get(
 );
 
 /**
+ * @route   PUT /api/academic/classes/:classId
+ * @desc    Update a class tier's name/numericLevel
+ * @access  Private (Admin, Academic_VP, Super Admin)
+ */
+router.put(
+  '/classes/:classId',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.body.schoolId;
+
+      if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+        res.status(400);
+        throw new Error('Validation Error: A valid schoolId must be provided.');
+      }
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const { classId } = req.params;
+    const { name, numericLevel } = req.body;
+
+    const updatedClass = await academicService.updateClass(schoolId, classId, { name, numericLevel });
+
+    res.status(200).json({
+      success: true,
+      message: 'Class tier updated successfully.',
+      data: updatedClass
+    });
+  })
+);
+
+/**
+ * @route   DELETE /api/academic/classes/:classId
+ * @desc    Delete a class tier (blocked if sections still reference it)
+ * @access  Private (Admin, Academic_VP, Super Admin)
+ */
+router.delete(
+  '/classes/:classId',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.body.schoolId || req.query.schoolId;
+
+      if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+        res.status(400);
+        throw new Error('Validation Error: A valid schoolId must be provided.');
+      }
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const { classId } = req.params;
+
+    await academicService.deleteClass(schoolId, classId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Class tier deleted successfully.'
+    });
+  })
+);
+
+/**
  * @route   POST /api/academic/sections
  * @desc    Create a new section under a specific class tier
  * @access  Private (Admin, Registrar)
@@ -142,6 +212,82 @@ router.get(
   })
 );
 
+/**
+ * @route   PUT /api/academic/sections/:sectionId
+ * @desc    Update a section's name/roomNumber/capacity/classId/homeroomTeacherId
+ * @access  Private (Admin, Registrar, Super Admin)
+ */
+router.put(
+  '/sections/:sectionId',
+  protect,
+  restrictTo('admin', 'registrar', 'super-admin'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.body.schoolId;
+
+      if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+        res.status(400);
+        throw new Error('Validation Error: A valid schoolId must be provided.');
+      }
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const { sectionId } = req.params;
+    const { name, roomNumber, capacity, classId, homeroomTeacherId } = req.body;
+
+    const updatedSection = await academicService.updateSection(schoolId, sectionId, {
+      name,
+      roomNumber,
+      capacity,
+      classId,
+      homeroomTeacherId
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Section updated successfully.',
+      data: updatedSection
+    });
+  })
+);
+
+/**
+ * @route   DELETE /api/academic/sections/:sectionId
+ * @desc    Delete a section
+ * @access  Private (Admin, Registrar, Super Admin)
+ */
+router.delete(
+  '/sections/:sectionId',
+  protect,
+  restrictTo('admin', 'registrar', 'super-admin'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.body.schoolId || req.query.schoolId;
+
+      if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+        res.status(400);
+        throw new Error('Validation Error: A valid schoolId must be provided.');
+      }
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const { sectionId } = req.params;
+
+    await academicService.deleteSection(schoolId, sectionId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Section deleted successfully.'
+    });
+  })
+);
+
 router.post( 
   '/subjects', 
   protect, 
@@ -204,6 +350,82 @@ router.get(
       success: true,
       count: subjects.length,
       data: subjects
+    });
+  })
+);
+
+/**
+ * @route   PUT /api/academic/subjects/:subjectId
+ * @desc    Update a subject's name/code/category/type/isActive
+ * @access  Private (Admin, Academic_VP, Super Admin)
+ */
+router.put(
+  '/subjects/:subjectId',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.body.schoolId;
+
+      if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+        res.status(400);
+        throw new Error('Validation Error: A valid schoolId must be provided.');
+      }
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const { subjectId } = req.params;
+    const { name, code, category, type, isActive } = req.body;
+
+    const updatedSubject = await academicService.updateSubject(schoolId, subjectId, {
+      name,
+      code,
+      category,
+      type,
+      isActive
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Subject module updated successfully.',
+      data: updatedSubject
+    });
+  })
+);
+
+/**
+ * @route   DELETE /api/academic/subjects/:subjectId
+ * @desc    Delete a subject and detach it from any classes/sections referencing it
+ * @access  Private (Admin, Academic_VP, Super Admin)
+ */
+router.delete(
+  '/subjects/:subjectId',
+  protect,
+  restrictTo('admin', 'academic_vp', 'super-admin'),
+  asyncHandler(async (req, res) => {
+    let schoolId;
+
+    if (req.user?.role === 'super-admin') {
+      schoolId = req.body.schoolId || req.query.schoolId;
+
+      if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
+        res.status(400);
+        throw new Error('Validation Error: A valid schoolId must be provided.');
+      }
+    } else {
+      schoolId = req.user?.schoolId;
+    }
+
+    const { subjectId } = req.params;
+
+    await academicService.deleteSubject(schoolId, subjectId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Subject module deleted successfully.'
     });
   })
 );
@@ -308,26 +530,26 @@ router.post(
  * @desc    Get complete section configuration including Class & Subjects details
  * @access  Private (Admin, Teacher, Registrar)
  */
-router.get( //[cite: 1]
-  '/sections/:sectionId/details', //[cite: 1]
-  protect, //[cite: 1]
-  restrictTo('admin', 'teacher', 'registrar'), //[cite: 1]
-  asyncHandler(async (req, res) => { //[cite: 1]
-    const { schoolId } = req.user; //[cite: 1]
-    const { sectionId } = req.params; //[cite: 1]
+router.get( 
+  '/sections/:sectionId/details', 
+  protect, 
+  restrictTo('admin', 'teacher', 'registrar'), 
+  asyncHandler(async (req, res) => { 
+    const { schoolId } = req.user; 
+    const { sectionId } = req.params; 
 
-    const fullDetails = await academicService.getFullSectionDetails(schoolId, sectionId); //[cite: 1]
+    const fullDetails = await academicService.getFullSectionDetails(schoolId, sectionId); 
 
-    if (!fullDetails) { //[cite: 1]
-      res.status(404); //[cite: 1]
-      throw new Error('Requested Section configuration could not be found.'); //[cite: 1]
-    } //[cite: 1]
+    if (!fullDetails) { 
+      res.status(404); 
+      throw new Error('Requested Section configuration could not be found.'); 
+    } 
 
-    res.status(200).json({ //[cite: 1]
-      success: true, //[cite: 1]
-      data: fullDetails //[cite: 1]
-    }); //[cite: 1]
-  }) //[cite: 1]
-); //[cite: 1]
+    res.status(200).json({ 
+      success: true, 
+      data: fullDetails 
+    }); 
+  }) 
+); 
 
-module.exports = router; //[cite: 1]
+module.exports = router; 

@@ -32,6 +32,71 @@ const getAllClasses = async (schoolId) => {
 };
 
 /**
+ * Update a Class tier's editable fields (name, numericLevel)
+ */
+const updateClass = async (schoolId, classId, updates) => {
+  const allowedUpdates = {};
+  if (updates.name !== undefined) allowedUpdates.name = updates.name;
+  if (updates.numericLevel !== undefined) allowedUpdates.numericLevel = updates.numericLevel;
+
+  if (Object.keys(allowedUpdates).length === 0) {
+    const error = new Error('No valid fields provided to update.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // If renaming, make sure the new name doesn't collide with another class in this school
+  if (allowedUpdates.name) {
+    const duplicate = await Class.findOne({
+      schoolId,
+      name: allowedUpdates.name,
+      _id: { $ne: classId }
+    });
+    if (duplicate) {
+      const error = new Error(`Class tier "${allowedUpdates.name}" already exists in your school.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  const updatedClass = await Class.findOneAndUpdate(
+    { _id: classId, schoolId },
+    { $set: allowedUpdates },
+    { returnDocument: 'after', runValidators: true }
+  ).populate('subjects', 'name code');
+
+  if (!updatedClass) {
+    const error = new Error('Class tier not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return updatedClass;
+};
+
+/**
+ * Delete a Class tier, blocking the operation if Sections still reference it
+ */
+const deleteClass = async (schoolId, classId) => {
+  const dependentSection = await Section.findOne({ schoolId, classId });
+  if (dependentSection) {
+    const error = new Error('Cannot delete this class tier while sections are still assigned to it.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const deletedClass = await Class.findOneAndDelete({ _id: classId, schoolId });
+
+  if (!deletedClass) {
+    const error = new Error('Class tier not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return deletedClass;
+};
+
+/**
  * Create a section mapped to a verified parent class under a specific school[cite: 2]
  */
 const createSection = async (schoolId, classId, sectionData) => {
@@ -75,6 +140,87 @@ const getAllSections = async (schoolId) => {
     .sort({ createdAt: -1 });
 };
 
+/**
+ * Update a Section's editable fields (name, roomNumber, capacity, classId, homeroomTeacherId)
+ */
+const updateSection = async (schoolId, sectionId, updates) => {
+  const allowedFields = ['name', 'roomNumber', 'capacity', 'classId', 'homeroomTeacherId'];
+  const allowedUpdates = {};
+  allowedFields.forEach((field) => {
+    if (updates[field] !== undefined) allowedUpdates[field] = updates[field];
+  });
+
+  if (Object.keys(allowedUpdates).length === 0) {
+    const error = new Error('No valid fields provided to update.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // If moving to a different class, confirm the new class actually exists in this school
+  if (allowedUpdates.classId) {
+    const parentClass = await Class.findOne({ _id: allowedUpdates.classId, schoolId });
+    if (!parentClass) {
+      const error = new Error('Target Class tier does not exist under your institution.');
+      error.statusCode = 404;
+      throw error;
+    }
+  }
+
+  // If renaming or reassigning class, make sure name stays unique within the class tier
+  if (allowedUpdates.name || allowedUpdates.classId) {
+    const existingSection = await Section.findOne({ _id: sectionId, schoolId });
+    if (!existingSection) {
+      const error = new Error('Section not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const nameToCheck = allowedUpdates.name || existingSection.name;
+    const classToCheck = allowedUpdates.classId || existingSection.classId;
+    const duplicate = await Section.findOne({
+      schoolId,
+      classId: classToCheck,
+      name: nameToCheck,
+      _id: { $ne: sectionId }
+    });
+    if (duplicate) {
+      const error = new Error(`Section "${nameToCheck}" is already taken in this class tier.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  const updatedSection = await Section.findOneAndUpdate(
+    { _id: sectionId, schoolId },
+    { $set: allowedUpdates },
+    { returnDocument: 'after', runValidators: true }
+  )
+    .populate('classId', 'name numericLevel')
+    .populate('homeroomTeacherId', 'name email photo');
+
+  if (!updatedSection) {
+    const error = new Error('Section not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return updatedSection;
+};
+
+/**
+ * Delete a Section
+ */
+const deleteSection = async (schoolId, sectionId) => {
+  const deletedSection = await Section.findOneAndDelete({ _id: sectionId, schoolId });
+
+  if (!deletedSection) {
+    const error = new Error('Section not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return deletedSection;
+};
+
 const createSubject = async (schoolId, subjectData) => {
   // Check for duplicate subject codes within the same school[cite: 2]
   const existingCode = await Subject.findOne({ schoolId, code: subjectData.code.toUpperCase() }); //[cite: 2]
@@ -113,6 +259,93 @@ const getAllSubjects = async (schoolId) => {
   }
 
   return await Subject.find(filter).sort({ name: 1 });
+};
+
+/**
+ * Update a Subject's editable fields (name, code, category, type, isActive)
+ */
+const updateSubject = async (schoolId, subjectId, updates) => {
+  const allowedFields = ['name', 'code', 'category', 'type', 'isActive'];
+  const allowedUpdates = {};
+  allowedFields.forEach((field) => {
+    if (updates[field] !== undefined) allowedUpdates[field] = updates[field];
+  });
+
+  if (allowedUpdates.code) {
+    allowedUpdates.code = allowedUpdates.code.toUpperCase();
+  }
+
+  if (Object.keys(allowedUpdates).length === 0) {
+    const error = new Error('No valid fields provided to update.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (allowedUpdates.code) {
+    const duplicateCode = await Subject.findOne({
+      schoolId,
+      code: allowedUpdates.code,
+      _id: { $ne: subjectId }
+    });
+    if (duplicateCode) {
+      const error = new Error(`Subject with code "${allowedUpdates.code}" already exists.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (allowedUpdates.name) {
+    const duplicateName = await Subject.findOne({
+      schoolId,
+      name: allowedUpdates.name,
+      _id: { $ne: subjectId }
+    });
+    if (duplicateName) {
+      const error = new Error(`Subject named "${allowedUpdates.name}" already exists.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  const updatedSubject = await Subject.findOneAndUpdate(
+    { _id: subjectId, schoolId },
+    { $set: allowedUpdates },
+    { returnDocument: 'after', runValidators: true }
+  );
+
+  if (!updatedSubject) {
+    const error = new Error('Subject not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return updatedSubject;
+};
+
+/**
+ * Delete a Subject and detach it from any Class tiers and Section subjectTeachers
+ * that currently reference it
+ */
+const deleteSubject = async (schoolId, subjectId) => {
+  const deletedSubject = await Subject.findOneAndDelete({ _id: subjectId, schoolId });
+
+  if (!deletedSubject) {
+    const error = new Error('Subject not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Clean up references so no dangling ObjectIds are left behind
+  await Class.updateMany(
+    { schoolId, subjects: subjectId },
+    { $pull: { subjects: subjectId } }
+  );
+  await Section.updateMany(
+    { schoolId, 'subjectTeachers.subjectId': subjectId },
+    { $pull: { subjectTeachers: { subjectId } } }
+  );
+
+  return deletedSubject;
 };
 
 /**
@@ -224,11 +457,17 @@ const getFullSectionDetails = async (schoolId, sectionId) => {
 module.exports = {
   createClass, 
   getAllClasses,
+  updateClass,
+  deleteClass,
   createSubject,
   getAllSubjects,
+  updateSubject,
+  deleteSubject,
   assignSubjectsToClass, 
   createSection, 
   getAllSections,
+  updateSection,
+  deleteSection,
   assignHomeroomTeacher,
   assignSubjectTeacher,
   getFullSectionDetails 
