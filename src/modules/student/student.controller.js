@@ -1,31 +1,21 @@
-// student.controller.js
 const asyncHandler = require('express-async-handler');
 const studentService = require('./student.service');
 const Student = require('./student.model');
+const { APIError } = require('../../middleware/authMiddleware');
 const { compressTeacherPhoto } = require('../../utils/imageProcessor');
 const { sendInvitationEmail } = require('../../utils/email.service'); 
 
 // @desc    Create a student profile with photo, and send access invite link
 // @route   POST /api/students
-// @access  Private (Admin, Registrar)
+// @access  Private (Admin, Registrar, Super Admin)
 const createStudent = asyncHandler(async (req, res) => {
-  // Gracefully handles fallback cross-role multi-tenant validation definitions[cite: 9]
-  const schoolId = (req.user && req.user.role === 'admin')
-    ? req.body.schoolId || req.user.schoolId
-    : req.user?.schoolId;
+  const schoolId = req.schoolId;
 
-  if (!schoolId) {
-    res.status(400);
-    throw new Error('Validation Error: A valid schoolId context is required.');
-  }
-
-  // Intercept, parse, and process raw multipart buffers if they exist[cite: 9]
   let photoPath = 'default-avatar.png';
   if (req.file) {
-    photoPath = await compressTeacherPhoto(req.file.buffer, schoolId); // <-- Compresses image using multi-tenant isolating rules[cite: 9]
+    photoPath = await compressTeacherPhoto(req.file.buffer, schoolId);
   }
 
-  // Safely capture string field mappings from multipart boundaries
   const studentDetails = {
     firstName: req.body.firstName,
     middleName: req.body.middleName,
@@ -34,7 +24,7 @@ const createStudent = asyncHandler(async (req, res) => {
     email: req.body.email,
     classId: req.body.classId,
     sectionId: req.body.sectionId,
-    photo: photoPath, // <-- Assign path to profile options schema block[cite: 9]
+    photo: photoPath,
     guardian: {
       fatherName: req.body.fatherName,
       motherName: req.body.motherName,
@@ -65,7 +55,7 @@ const acceptInvite = asyncHandler(async (req, res) => {
 
   if (!password) {
     res.status(400);
-    throw new Error('Please provide a password to complete registration');
+    throw new APIError('Please provide a password to complete registration.', 400, 'INVALID_INPUT');
   }
 
   const newUser = await studentService.acceptStudentInvitation(token, password);
@@ -79,9 +69,11 @@ const acceptInvite = asyncHandler(async (req, res) => {
 
 // @desc    Get all students within a school context
 // @route   GET /api/students
-// @access  Private (Admin, Registrar, Teacher)
+// @access  Private (Admin, Registrar, Teacher, Super Admin)
 const getAllStudents = asyncHandler(async (req, res) => {
-  const students = await Student.find({ schoolId: req.user.schoolId })
+  const filter = req.schoolId ? { schoolId: req.schoolId } : {};
+
+  const students = await Student.find(filter)
     .populate('userId', 'email role isActive')
     .populate('classId', 'name numericLevel')
     .populate('sectionId', 'name roomNumber');
@@ -89,4 +81,45 @@ const getAllStudents = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, count: students.length, data: students });
 });
 
-module.exports = { createStudent, acceptInvite, getAllStudents };
+// @desc    Update a student profile
+// @route   PUT /api/students/:studentId
+// @access  Private (Admin, Registrar, Super Admin)
+const updateStudent = asyncHandler(async (req, res) => {
+  const { studentId } = req.params;
+
+  let updateData = { ...req.body };
+
+  if (req.file) {
+    updateData.photo = await compressTeacherPhoto(req.file.buffer, req.schoolId);
+  }
+
+  const updatedStudent = await studentService.updateStudent(req.schoolId, studentId, updateData);
+
+  res.status(200).json({
+    success: true,
+    message: 'Student record updated successfully.',
+    data: updatedStudent
+  });
+});
+
+// @desc    Delete a student record and user account
+// @route   DELETE /api/students/:studentId
+// @access  Private (Admin, Registrar, Super Admin)
+const deleteStudent = asyncHandler(async (req, res) => {
+  const { studentId } = req.params;
+
+  await studentService.deleteStudent(req.schoolId, studentId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Student record and associated user account deleted successfully.'
+  });
+});
+
+module.exports = { 
+  createStudent, 
+  acceptInvite, 
+  getAllStudents,
+  updateStudent,
+  deleteStudent
+};

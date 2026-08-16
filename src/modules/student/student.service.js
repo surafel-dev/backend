@@ -1,4 +1,3 @@
-// student.service.js
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Student = require('./student.model');
@@ -26,12 +25,12 @@ const createStudentAndInvite = async (schoolId, studentDetails) => {
 
   const newStudent = await Student.create({
     schoolId,
-    firstName: firstName.trim(),
+    firstName: firstName?.trim(),
     middleName: middleName?.trim(),
-    lastName: lastName.trim(),
+    lastName: lastName?.trim(),
     gender,
     email: email.toLowerCase().trim(),
-    photo, // <-- Mapped into database storage container[cite: 12]
+    photo,
     classId,
     sectionId,
     guardian,
@@ -99,7 +98,66 @@ const acceptStudentInvitation = async (token, password) => {
   }
 };
 
+const updateStudent = async (schoolId, studentId, updateData) => {
+  const query = schoolId ? { _id: studentId, schoolId } : { _id: studentId };
+
+  const student = await Student.findOne(query);
+  if (!student) {
+    const error = new Error('Student record not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Handle nested object updates safely
+  if (updateData.guardian) {
+    updateData.guardian = { ...student.guardian, ...updateData.guardian };
+  }
+
+  const updatedStudent = await Student.findByIdAndUpdate(
+    studentId,
+    { $set: updateData },
+    { new: true, runValidators: true }
+  )
+    .populate('userId', 'email role isActive')
+    .populate('classId', 'name numericLevel')
+    .populate('sectionId', 'name roomNumber');
+
+  return updatedStudent;
+};
+
+const deleteStudent = async (schoolId, studentId) => {
+  const query = schoolId ? { _id: studentId, schoolId } : { _id: studentId };
+
+  const student = await Student.findOne(query);
+  if (!student) {
+    const error = new Error('Student record not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // If student has an associated User account, delete it as well
+    if (student.userId) {
+      await User.findByIdAndDelete(student.userId, { session });
+    }
+
+    await Student.findByIdAndDelete(studentId, { session });
+    await session.commitTransaction();
+    return true;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
 module.exports = {
   createStudentAndInvite,
-  acceptStudentInvitation
+  acceptStudentInvitation,
+  updateStudent,
+  deleteStudent
 };

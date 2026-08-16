@@ -1,18 +1,55 @@
-// student.routes.js
 const express = require('express');
 const router = express.Router();
-const { getAllStudents, createStudent, acceptInvite } = require('./student.controller');
+const { 
+  getAllStudents, 
+  createStudent, 
+  acceptInvite, 
+  updateStudent, 
+  deleteStudent 
+} = require('./student.controller');
 const Student = require('./student.model');
 const { uploadPhoto } = require('../../utils/imageProcessor');
-const queryHandler  = require('../../middleware/queryHandler');
-const { protect, restrictTo } = require('../../middleware/authMiddleware');
+const queryHandler = require('../../middleware/queryHandler');
+const { protect, restrictTo, extractSchoolId } = require('../../middleware/authMiddleware');
+const { verifySchoolAccess } = require('../../middleware/schoolContextMiddleware');
+
 // Public route for students claiming accounts
 router.post('/accept-invite/:token', acceptInvite);
 
 // Administrative roster controls
 router.route('/')
-  .get(protect, restrictTo('admin', 'registrar', 'teacher'), queryHandler(Student, 'classId'), getAllStudents)
+  .get(
+    protect, 
+    restrictTo('admin', 'registrar', 'teacher', 'super-admin'), 
+    extractSchoolId({ required: false }), 
+    verifySchoolAccess, 
+    queryHandler(Student, 'classId'), 
+    getAllStudents
+  )
+  .post(
+    protect, 
+    restrictTo('admin', 'registrar', 'super-admin'), 
+    extractSchoolId({ required: true }), 
+    verifySchoolAccess, 
+    uploadPhoto, 
+    createStudent
+  );
 
-  .post(protect, restrictTo('admin', 'registrar'), uploadPhoto, createStudent);
+router.route('/:studentId')
+  .put(
+    protect, 
+    restrictTo('admin', 'registrar', 'super-admin'), 
+    extractSchoolId({ required: true }), 
+    verifySchoolAccess, 
+    uploadPhoto, 
+    updateStudent
+  )
+  .delete(
+    protect, 
+    restrictTo('admin', 'registrar', 'super-admin'), 
+    extractSchoolId({ required: true }), 
+    verifySchoolAccess, 
+    deleteStudent
+  );
 
 module.exports = router;
