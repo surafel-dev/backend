@@ -34,12 +34,25 @@ const createStudent = asyncHandler(async (req, res) => {
 
   const { student: newStudent, token } = await studentService.createStudentAndInvite(schoolId, studentDetails);
 
-  const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invite/${token}`;
-  const emailPreviewUrl = await sendInvitationEmail(newStudent.email, inviteLink);
+  const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3039'}/accept-invite/student/${token}`;
+
+  // The student record is already committed by this point. Email delivery
+  // is now bounded by email.service.js's own connection/greeting/socket
+  // timeouts, so a broken SMTP path fails within ~10-15s instead of
+  // hanging indefinitely — but we still don't want a genuinely failed
+  // send (vs. just a slow one) to turn a successful student creation into
+  // a 500 for the caller, so failures are caught and logged instead of
+  // thrown.
+  let emailPreviewUrl = null;
+  try {
+    emailPreviewUrl = await sendInvitationEmail(newStudent.email, inviteLink);
+  } catch (err) {
+    console.error(`✉️  Failed to send invitation email to ${newStudent.email}:`, err.message);
+  }
 
   res.status(201).json({ 
     success: true, 
-    message: 'Student record initialized and activation email dispatched via Nodemailer.',
+    message: 'Student record initialized successfully.',
     inviteToken: token,
     emailPreviewUrl,
     data: newStudent 
@@ -87,7 +100,45 @@ const getAllStudents = asyncHandler(async (req, res) => {
 const updateStudent = asyncHandler(async (req, res) => {
   const { studentId } = req.params;
 
-  let updateData = { ...req.body };
+  const {
+    firstName,
+    middleName,
+    lastName,
+    gender,
+    email,
+    classId,
+    sectionId,
+    fatherName,
+    motherName,
+    primaryContactPhone,
+  } = req.body;
+
+  // Explicit whitelist — req.body may also carry schoolId (sent by the
+  // frontend so extractSchoolId can authorize the request) and possibly
+  // other fields that were never meant to be directly writable here
+  // (status, invitationToken, userId, etc.). Only these known,
+  // student-editable fields are ever passed through to the service layer.
+  const updateData = {
+    ...(firstName !== undefined && { firstName }),
+    ...(middleName !== undefined && { middleName }),
+    ...(lastName !== undefined && { lastName }),
+    ...(gender !== undefined && { gender }),
+    ...(email !== undefined && { email }),
+    ...(classId !== undefined && { classId }),
+    ...(sectionId !== undefined && { sectionId }),
+  };
+
+  // The Student schema nests these under `guardian`, but the edit form
+  // sends them flat — reshape here the same way createStudent already
+  // does, so studentService.updateStudent's `{ ...student.guardian,
+  // ...updateData.guardian }` merge actually has something to merge.
+  if (fatherName !== undefined || motherName !== undefined || primaryContactPhone !== undefined) {
+    updateData.guardian = {
+      ...(fatherName !== undefined && { fatherName }),
+      ...(motherName !== undefined && { motherName }),
+      ...(primaryContactPhone !== undefined && { primaryContactPhone }),
+    };
+  }
 
   if (req.file) {
     updateData.photo = await compressTeacherPhoto(req.file.buffer, req.schoolId);

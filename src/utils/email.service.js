@@ -1,29 +1,54 @@
 const nodemailer = require('nodemailer');
 
-if (process.env.NODE_ENV === 'production') {
+// ----------------------------------------------------------------------
+// DEV MODE (default): no SMTP server involved at all — not Ethereal
+// (needs internet), not Maildev (needs a second local process running).
+// The invite link is already generated before this function is even
+// called, so in development we just log it straight to the console and
+// return it, instead of routing it through email infrastructure that has
+// nothing to do with what you're actually trying to test.
+//
+// PRODUCTION: set EMAIL_TRANSPORT=smtp and provide SMTP_HOST / SMTP_PORT /
+// SMTP_USER / SMTP_PASS (or swap this block for your provider's SDK —
+// SendGrid, Postmark, SES, etc. all work fine here). The guard below stops
+// this file from silently no-op'ing in production and pretending emails
+// went out when they didn't.
+// ----------------------------------------------------------------------
+
+const useRealSmtp = process.env.EMAIL_TRANSPORT === 'smtp';
+
+if (process.env.NODE_ENV === 'production' && !useRealSmtp) {
   throw new Error(
-    'email.service.js is currently hardcoded to the Ethereal sandbox and cannot send real email. ' +
-    'Do not deploy to production until this is swapped for a real SMTP provider (see comment at top of file).'
+    'email.service.js has no real email transport configured. ' +
+    'Set EMAIL_TRANSPORT=smtp and SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS before deploying to production.'
   );
 }
 
 let transporterPromise = null;
 
 const getTransporter = () => {
+  if (!useRealSmtp) return null; // dev mode never needs a transporter
+
   if (transporterPromise) return transporterPromise;
 
-  transporterPromise = (async () => {
-    const testAccount = await nodemailer.createTestAccount();
-    return nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
+  transporterPromise = (async () =>
+    nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
       auth: {
-        user: testAccount.user,
-        pass: testAccount.pass
-      }
-    });
-  })();
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000
+    })
+  )();
+
+  transporterPromise.catch(() => {
+    transporterPromise = null;
+  });
 
   return transporterPromise;
 };
@@ -33,6 +58,12 @@ const getTransporter = () => {
 const sendInvitationEmail = async (toEmail, passwordInviteLink) => {
   if (!passwordInviteLink) {
     throw new Error('sendInvitationEmail requires a passwordInviteLink');
+  }
+
+  if (!useRealSmtp) {
+    // Nothing to send, nothing to fail. Just surface the link.
+    console.log(`✉️  [DEV] Invite for ${toEmail}: ${passwordInviteLink}`);
+    return passwordInviteLink;
   }
 
   const transporter = await getTransporter();
@@ -56,11 +87,10 @@ const sendInvitationEmail = async (toEmail, passwordInviteLink) => {
     `
   };
 
-  const info = await transporter.sendMail(mailOptions);
+  await transporter.sendMail(mailOptions);
 
-  console.log(`✉️ Fake-sent to ${toEmail} (Ethereal sandbox — nothing actually delivered)`);
-  console.log(`🔗 Open this to see/click the real email: ${nodemailer.getTestMessageUrl(info)}`);
-  return nodemailer.getTestMessageUrl(info);
+  console.log(`✉️  Sent to ${toEmail} via ${process.env.SMTP_HOST}`);
+  return null; // no preview URL for real SMTP — it actually went out
 };
 
 module.exports = { sendInvitationEmail };

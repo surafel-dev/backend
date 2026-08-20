@@ -29,9 +29,9 @@ router.route('/')
   .post(
     protect, 
     restrictTo('admin', 'registrar', 'super-admin'), 
+    uploadPhoto, 
     extractSchoolId({ required: true }), 
     verifySchoolAccess, 
-    uploadPhoto, 
     createStudent
   );
 
@@ -39,9 +39,9 @@ router.route('/:studentId')
   .put(
     protect, 
     restrictTo('admin', 'registrar', 'super-admin'), 
+    uploadPhoto, 
     extractSchoolId({ required: true }), 
     verifySchoolAccess, 
-    uploadPhoto, 
     updateStudent
   )
   .delete(

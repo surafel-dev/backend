@@ -57,7 +57,6 @@ const acceptTeacherInvitation = async (token, password) => {
     throw error;
   }
 
-  // <-- FIX: Changed query from inviteToken to invitationToken
   const teacher = await Teacher.findOne({ 
     invitationToken: token, 
     status: 'Pending', 

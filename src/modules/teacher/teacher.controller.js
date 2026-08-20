@@ -1,46 +1,26 @@
-const mongoose = require('mongoose');
 const asyncHandler = require('express-async-handler');
 const teacherService = require('./teacher.service');
 const School = require('../school/school.model');
 const { compressTeacherPhoto } = require('../../utils/imageProcessor');
-const { sendInvitationEmail } = require('../../utils/email.service'); 
+const { sendInvitationEmail } = require('../../utils/email.service');
+
+// req.schoolId is resolved once, upstream, by extractSchoolId + verifySchoolAccess
+// (see teacher.routes.js). Nothing in this file re-derives it.
 
 const inviteTeacher = asyncHandler(async (req, res) => {
+  const schoolId = req.schoolId;
   const { name, email, phoneNumber, bio, street, city, state, zipCode } = req.body;
-
-  let schoolId;
-
-  if (req.user?.role === 'super-admin') {
-    // Super-admin isn't tied to one school — they must explicitly choose one.
-    schoolId = req.body.schoolId;
-
-    if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
-      res.status(400);
-      throw new Error('Validation Error: A valid schoolId must be provided.');
-    }
-
-    // Don't trust the client blindly — confirm the school actually exists.
-    const schoolExists = await School.exists({ _id: schoolId });
-    if (!schoolExists) {
-      res.status(404);
-      throw new Error('The specified school could not be found.');
-    }
-  } else {
-    // Every other role (admin, hr, etc.) is hard-pinned to their own school.
-    // req.body.schoolId is intentionally ignored here — trusting it would let
-    // a compromised/malicious admin invite a "teacher" into a school they
-    // don't manage.
-    schoolId = req.user?.schoolId;
-  }
-
-  if (!schoolId) {
-    res.status(400);
-    throw new Error('Validation Error: A valid schoolId context is required.');
-  }
 
   if (!name || !email) {
     res.status(400);
     throw new Error('Please provide both a name and an email address');
+  }
+
+  // Don't trust the resolved schoolId blindly — confirm the school actually exists.
+  const schoolExists = await School.exists({ _id: schoolId });
+  if (!schoolExists) {
+    res.status(404);
+    throw new Error('The specified school could not be found.');
   }
 
   let photoPath = 'default-avatar.png';
@@ -59,54 +39,51 @@ const inviteTeacher = asyncHandler(async (req, res) => {
 
   const { teacher: newTeacher, token } = await teacherService.inviteTeacher(schoolId, teacherDetails);
 
-  const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3039'}/accept-invite/${token}`;
-  const emailPreviewUrl = await sendInvitationEmail(newTeacher.email, inviteLink);
+  const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3039'}/accept-invite/teacher/${token}`;
+
+  // Same reasoning as student invites: bounded by email.service.js's own
+  // timeouts now, and a genuine send failure is logged rather than turning
+  // a successful teacher invitation into a 500. emailPreviewUrl stays in
+  // the response since teacherSlice.js depends on it for the dev preview
+  // link — it'll just be null if the send failed or timed out.
+  let emailPreviewUrl = null;
+  try {
+    emailPreviewUrl = await sendInvitationEmail(newTeacher.email, inviteLink);
+  } catch (err) {
+    console.error(`✉️  Failed to send invitation email to ${newTeacher.email}:`, err.message);
+  }
 
   res.status(201).json({
     success: true,
-    message: 'Teacher invitation created successfully and email notification sent.',
+    message: 'Teacher invitation created successfully.',
     inviteToken: token,
     emailPreviewUrl,
     teacher: newTeacher
   });
 });
 
-// acceptInvite remains exactly as you had it...
 const acceptInvite = asyncHandler(async (req, res) => {
-  const { token } = req.params; //[cite: 7]
-  const { password } = req.body; //[cite: 7]
+  const { token } = req.params;
+  const { password } = req.body;
 
-  if (!password) { //[cite: 7]
-    res.status(400); //[cite: 7]
-    throw new Error('Please provide a password to complete registration'); //[cite: 7]
+  if (!password) {
+    res.status(400);
+    throw new Error('Please provide a password to complete registration');
   }
 
-  const newUser = await teacherService.acceptTeacherInvitation(token, password); //[cite: 7]
+  const newUser = await teacherService.acceptTeacherInvitation(token, password);
 
   res.status(200).json({
     success: true,
-    message: 'Account activated successfully. You can now log in.', //[cite: 7]
-    user: { id: newUser._id, email: newUser.email, role: newUser.role } //[cite: 7]
+    message: 'Account activated successfully. You can now log in.',
+    user: { id: newUser._id, email: newUser.email, role: newUser.role }
   });
 });
 
 const assignClassSubject = asyncHandler(async (req, res) => {
+  const schoolId = req.schoolId;
   const { classId, subjectId } = req.body;
   const teacherId = req.params.id;
-
-  let schoolId;
-
-  if (req.user?.role === 'super-admin') {
-    // Super-admin isn't tied to one school — they must explicitly choose one.
-    schoolId = req.body.schoolId;
-
-    if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
-      res.status(400);
-      throw new Error('Validation Error: A valid schoolId must be provided.');
-    }
-  } else {
-    schoolId = req.user?.schoolId;
-  }
 
   if (!classId || !subjectId) {
     res.status(400);
@@ -127,44 +104,8 @@ const assignClassSubject = asyncHandler(async (req, res) => {
   });
 });
 
-const revokeAccess = asyncHandler(async (req, res) => {
-  const teacherId = req.params.id;
-
-  let schoolId;
-
-  if (req.user?.role === 'super-admin') {
-    // Super-admin isn't tied to one school — they must explicitly choose one.
-    schoolId = req.body.schoolId;
-
-    if (!schoolId || !mongoose.Types.ObjectId.isValid(schoolId)) {
-      res.status(400);
-      throw new Error('Validation Error: A valid schoolId must be provided.');
-    }
-  } else {
-    schoolId = req.user?.schoolId;
-  }
-
-  const teacher = await teacherService.revokeTeacherAccess(schoolId, teacherId);
-
-  res.status(200).json({
-    success: true,
-    message: 'Teacher access revoked successfully',
-    teacher: { id: teacher._id, email: teacher.email, status: teacher.status }
-  });
-});
-
 const getAllTeachers = asyncHandler(async (req, res) => {
-  let schoolId;
-
-  if (req.user?.role === 'super-admin') {
-    // Super-admin can optionally filter by a query parameter 'schoolId'
-    schoolId = req.query.schoolId;
-  } else {
-    // Other roles are locked to their own school context
-    schoolId = req.user?.schoolId;
-  }
-
-  const teachers = await teacherService.getAllTeachers(schoolId);
+  const teachers = await teacherService.getAllTeachers(req.schoolId);
 
   res.status(200).json({
     success: true,
@@ -174,22 +115,24 @@ const getAllTeachers = asyncHandler(async (req, res) => {
 });
 
 const getAcceptedTeachers = asyncHandler(async (req, res) => {
-  let schoolId;
-
-  if (req.user?.role === 'super-admin') {
-    // Super-admin can optionally filter by a query parameter 'schoolId'
-    schoolId = req.query.schoolId;
-  } else {
-    // Other roles are locked to their own school context
-    schoolId = req.user?.schoolId;
-  }
-
-  const teachers = await teacherService.getAcceptedTeachers(schoolId);
+  const teachers = await teacherService.getAcceptedTeachers(req.schoolId);
 
   res.status(200).json({
     success: true,
     count: teachers.length,
     teachers
+  });
+});
+
+const revokeAccess = asyncHandler(async (req, res) => {
+  const teacherId = req.params.id;
+
+  const teacher = await teacherService.revokeTeacherAccess(req.schoolId, teacherId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Teacher access revoked successfully',
+    teacher: { id: teacher._id, email: teacher.email, status: teacher.status }
   });
 });
 
