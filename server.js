@@ -10,6 +10,7 @@ dotenv.config();
 
 const connectDB = require('./src/config/db.js');
 const {notFound, errorHandler} = require('./src/middleware/errorMiddleware.js');
+const { startInvitationCleanupJob } = require('./src/middleware/jobs/invitationCleanup.job.js');
 
 const superadminRoutes = require('./src/modules/auth/auth.routes.js');
 const schoolRoutes = require('./src/modules/school/school.routes.js');
@@ -25,6 +26,8 @@ const port = process.env.PORT || 5000;
 
 
 connectDB();
+
+startInvitationCleanupJob();
 
 const app = express();
 

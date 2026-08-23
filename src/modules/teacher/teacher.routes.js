@@ -6,7 +6,8 @@ const {
   assignClassSubject,
   getAllTeachers,
   getAcceptedTeachers,
-  revokeAccess
+  revokeAccess,
+  updateTeacher
 } = require('./teacher.controller');
 const { uploadPhoto } = require('../../utils/imageProcessor');
 const { protect, restrictTo, extractSchoolId } = require('../../middleware/authMiddleware');
@@ -34,11 +35,6 @@ router.get(
   getAcceptedTeachers
 );
 
-// NOTE: uploadPhoto runs BEFORE extractSchoolId here on purpose. This is a
-// multipart/form-data request, so req.body.schoolId doesn't exist until
-// multer (uploadPhoto) has parsed the form — if extractSchoolId ran first,
-// it would never see a super-admin's schoolId field and would silently fall
-// through to the "no schoolId" error every time.
 router.post(
   '/invite',
   protect,
@@ -65,6 +61,16 @@ router.post(
   extractSchoolId({ required: true }),
   verifySchoolAccess,
   revokeAccess
+);
+
+router.put(
+  '/update/:id',
+  protect,
+  restrictTo('admin', 'super-admin'),
+  uploadPhoto,
+  extractSchoolId({ required: true }),
+  verifySchoolAccess,
+  updateTeacher
 );
 
 module.exports = router;

@@ -222,11 +222,38 @@ const getAcceptedTeachers = async (schoolId) => {
   return teachers;
 };
 
+const updateTeacher = async (schoolId, teacherId, updateData) => {
+  const query = schoolId ? { _id: teacherId, schoolId } : { _id: teacherId };
+
+  const teacher = await Teacher.findOne(query);
+  if (!teacher) {
+    const error = new Error('Teacher record not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Handle nested object updates safely
+  if (updateData.address) {
+    updateData.address = { ...teacher.address, ...updateData.address };
+  }
+
+  const updatedTeacher = await Teacher.findByIdAndUpdate(
+    teacherId,
+    { $set: updateData },
+    { returnDocument: 'after', runValidators: true }
+  )
+    .populate('userId', 'email role isActive');
+
+  return updatedTeacher;
+};
+
+
 module.exports = {
   inviteTeacher,
   acceptTeacherInvitation,
   allocateClassAndSubject,
   revokeTeacherAccess,
   getAllTeachers,
-  getAcceptedTeachers
+  getAcceptedTeachers,
+  updateTeacher
 };

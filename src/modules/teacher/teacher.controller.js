@@ -136,11 +136,45 @@ const revokeAccess = asyncHandler(async (req, res) => {
   });
 });
 
+const updateTeacher = asyncHandler(async (req, res) => {
+  const teacherId = req.params.id;
+  const { name, email, phoneNumber, bio, street, city, state, zipCode } = req.body;
+
+  const updateData = {};
+  if (name !== undefined) updateData.name = name;
+  if (email !== undefined) updateData.email = email;
+  if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+  if (bio !== undefined) updateData.bio = bio;
+
+
+  const addressUpdates = {};
+  if (street !== undefined) addressUpdates.street = street;
+  if (city !== undefined) addressUpdates.city = city;
+  if (state !== undefined) addressUpdates.state = state;
+  if (zipCode !== undefined) addressUpdates.zipCode = zipCode;
+  if (Object.keys(addressUpdates).length > 0) {
+    updateData.address = addressUpdates;
+  }
+
+  if (req.file) {
+    updateData.photo = await compressTeacherPhoto(req.file.buffer, req.schoolId);
+  }
+
+  const updatedTeacher = await teacherService.updateTeacher(req.schoolId, teacherId, updateData);
+
+  res.status(200).json({
+    success: true,
+    message: 'Teacher record updated successfully.',
+    data: updatedTeacher
+  });
+});
+
 module.exports = {
   getAllTeachers,
   getAcceptedTeachers,
   inviteTeacher,
   acceptInvite,
   assignClassSubject,
-  revokeAccess
+  revokeAccess,
+  updateTeacher
 };

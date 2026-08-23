@@ -1,23 +1,54 @@
 const mongoose = require('mongoose');
 
 const TeacherSchema = new mongoose.Schema({
-  schoolId: { type: mongoose.Schema.Types.ObjectId, ref: 'School', required: true },
+  schoolId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'School', 
+    required: true 
+  },
   // Changed to optional initially with sparse: true for the pending invitation state
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', unique: true, sparse: true },
-  name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, trim: true, lowercase: true },
-  phoneNumber: { type: String, trim: true },
+  userId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    unique: true, 
+    sparse: true 
+  },
+  name: { 
+    type: String, 
+    required: true, 
+    trim: true 
+  },
+  email: { 
+    type: String, 
+    required: true, 
+    trim: true, 
+    lowercase: true 
+  },
+  phoneNumber: { type: 
+    String, 
+    trim: true 
+  },
   
-  photo: { type: String, default: 'default-avatar.png' },
+  photo: { 
+    type: String, 
+    default: 'default-avatar.png' 
+  },
   address: {
     street: { type: String, trim: true },
     city: { type: String, trim: true },
     state: { type: String, trim: true },
     zipCode: { type: String, trim: true }
   },
-  bio: { type: String, trim: true },
+  bio: { 
+    type: String, 
+    trim: true 
+  },
   
-  status: { type: String, enum: ['Pending', 'Active', 'Revoked'], default: 'Pending' },
+  status: { 
+    type: String, 
+    enum: ['Pending', 'Active', 'Revoked'], 
+    default: 'Pending' 
+  },
   invitationToken: { 
   type: String, 
   select: false 
